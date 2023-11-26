@@ -11,13 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-FROM debian11
+FROM debian:bookworm-slim
 WORKDIR /home/callouts
 COPY . .
-RUN apt-get update && apt-get install -y python3-grpc-tools
-RUN pip install -r ./requiremetns.txt
+RUN apt-get update && apt-get install -y python3-pip python3-grpc-tools curl
+RUN pip install --break-system-packages  -r ./requirements.txt -r ./requirements-test.txt
+
+## On build download the latest IAP Certificate that is used to validate IAP JWT
 RUN curl https://www.gstatic.com/iap/verify/public_key -o ./iap_public_key.crt
-EXPOSE 80
+
+## Health Checkport
+EXPOSE 8000
+
+## Unsecure Port
 EXPOSE 8080
-EXPOSE 443
+
+## Secure Port
+EXPOSE 8443
 CMD [ "/usr/bin/python3", "server.py" ]

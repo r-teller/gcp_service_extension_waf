@@ -55,6 +55,26 @@ SERVER_CERTIFICATE = open("ssl_creds/localhost.crt", "rb").read()
 SERVER_CERTIFICATE_KEY = open("ssl_creds/localhost.key", "rb").read()
 ROOT_CERTIFICATE = open("ssl_creds/root.crt", "rb").read()
 
+IAP_CERTIFICATE = open("./iap_public_key.crt", "rb").read()
+
+SERVICE_EXTENSION_DEBUG = environ.get("se_debug", "False").lower() == ("true")
+SERVICE_EXTENSION_TEST = environ.get("se_test", "False").lower() == ("true")
+SERVICE_EXTENSION_REQUIRE_IAP = environ.get("se_require_iap", "False").lower() == (
+    "true"
+)
+SERVICE_EXTENSION_ALLOWED_IPV4_CIDR_RANGES = environ.get("se_allowed_ipv4_cidr_ranges")
+SERVICE_EXTENSION_DENIED_IPV4_CIDR_RANGES = environ.get("se_denied_ipv4_cidr_ranges")
+
+if SERVICE_EXTENSION_DEBUG:
+    print(f"Service Extension Test Mode: {SERVICE_EXTENSION_TEST}")
+    print(f"Service Extension Require IAP: {SERVICE_EXTENSION_REQUIRE_IAP}")
+    print(
+        f"Service Extension Allowed Source Ranges: {SERVICE_EXTENSION_ALLOWED_IPV4_CIDR_RANGES}"
+    )
+    print(
+        f"Service Extension Denied Source Ranges: {SERVICE_EXTENSION_DENIED_IPV4_CIDR_RANGES}"
+    )
+
 
 # [END serviceextensions_callout_add_header_imports]
 # [START serviceextensions_callout_add_header_main]
@@ -80,7 +100,7 @@ def add_headers_mutation(
     return response_header_mutation
 
 
-def validate_iap_jwt(iap_jwt, expected_audience):
+def validate_iap_jwt(iap_jwt):
     """Validate an IAP JWT.
 
     Args:
@@ -97,8 +117,8 @@ def validate_iap_jwt(iap_jwt, expected_audience):
         decoded_jwt = id_token.verify_token(
             iap_jwt,
             requests.Request(),
-            audience=expected_audience,
-            certs_url="https://www.gstatic.com/iap/verify/public_key",
+            audience=None,
+            certs_url="http://127.0.0.1:8000/iap_public_key.crt",
         )
         return (decoded_jwt["sub"], decoded_jwt["email"], "")
     except Exception as e:
@@ -113,45 +133,97 @@ def custom_response(status_code, custom_response):
 
 
 def handle_iap_jwt_validation(header_value):
-    print(f"\tHeader value is => {header_value}")
-    ser_id, user_email, error_str = validate_iap_jwt(header_value, "")
+    ser_id, user_email, error_str = validate_iap_jwt(header_value)
     if error_str:
-        print(f"\t\tINVALID JWT ==> {error_str}")
+        if SERVICE_EXTENSION_DEBUG:
+            print(f"Service Extension IAP Header was invalid: {error_str}")
         return custom_response(
             service_pb2.StatusCode.Unauthorized,
             "Either the JWT token is invalid or was not provided",
         )
-    return None  # Return None if no error
+    if SERVICE_EXTENSION_DEBUG:
+        print(f"Service Extension IAP Header was valid")
+    return None  # Return if no Validation Issue
 
 
 def handle_xff_validation(header_value):
-    print(f"\tHeader value is => {header_value}")
-    ip_list = header_value.split(",")
     allow_request = True
     deny_request = False
-    if len(ip_list) >= 2:
-        source_ip = ip_list[-2]
-        if environ.get("se_allowed_sources"):
+    matched_ipv4_cidr = None
+    allowed_ipv4_cidr_ranges = []
+    denied_ipv4_cidr_ranges = []
+    xff_list = [ip.strip() for ip in header_value.split(",") if ip.strip()]
+
+    if len(xff_list) >= 2:
+        client_ipv4 = xff_list[-2]
+        if SERVICE_EXTENSION_ALLOWED_IPV4_CIDR_RANGES:
             allow_request = False
-            allowed_sources = environ.get("se_allowed_sources").split(",")
-            for allowed_source in allowed_sources:
-                if ip_address(source_ip) in ip_network(allowed_source):
-                    return None
-        if environ.get("se_denied_sources"):
-            denied_sources = environ.get("se_denied_sources").split(",")
-            for denied_source in denied_sources:
-                if ip_address(source_ip) in ip_network(denied_source):
+            allowed_ipv4_cidr_ranges = [
+                allowed_ipv4_cidr.strip()
+                for allowed_ipv4_cidr in SERVICE_EXTENSION_ALLOWED_IPV4_CIDR_RANGES.split(
+                    ","
+                )
+                if allowed_ipv4_cidr.strip()
+            ]
+        if SERVICE_EXTENSION_DENIED_IPV4_CIDR_RANGES:
+            denied_ipv4_cidr_ranges = [
+                denied_ipv4_cidr.strip()
+                for denied_ipv4_cidr in SERVICE_EXTENSION_DENIED_IPV4_CIDR_RANGES.split(
+                    ","
+                )
+                if denied_ipv4_cidr.strip()
+            ]
+
+        combined_ipv4_cidr_ranges = [
+            (cidr, "deny") for cidr in denied_ipv4_cidr_ranges
+        ] + [(cidr, "allow") for cidr in allowed_ipv4_cidr_ranges]
+        sorted_ipv4_cidr_ranges = sorted(
+            combined_ipv4_cidr_ranges,
+            key=lambda x: int(x[0].split("/")[1]),
+            reverse=True,
+        )
+
+        if SERVICE_EXTENSION_DEBUG:
+            print(
+                f"Service Extension XFF Header sorted CIDR Ranges: {sorted_ipv4_cidr_ranges}"
+            )
+
+        for cidr, action in sorted_ipv4_cidr_ranges:
+            if ip_address(client_ipv4) in ip_network(cidr):
+                matched_ipv4_cidr = cidr
+                if action == "allow":
+                    allow_request = True
+                    deny_request = False
+                elif action == "deny":
+                    allow_request = False
                     deny_request = True
-        if not allow_request:
+                break
+
+        if SERVICE_EXTENSION_DEBUG:
+            print(
+                f"Service Extension XFF Header result:\r\n\tSource IPv4 ({client_ipv4})\r\n\tDeny Request: {deny_request}\r\n\tAllow Request: {allow_request}\r\n\tMatched IPv4 CIDR: {matched_ipv4_cidr}"
+            )
+
+        if not allow_request and not deny_request:
+            if SERVICE_EXTENSION_DEBUG:
+                print(
+                    f"Service Extension XFF Header for source ip ({client_ipv4}) did not match any allowed ranges"
+                )
             return custom_response(
                 service_pb2.StatusCode.Forbidden,
-                f"Requests for source ip ({source_ip}) was not allowed",
+                f"Requests for source ip ({client_ipv4}) was not allowed",
             )
+
         if deny_request:
+            if SERVICE_EXTENSION_DEBUG:
+                print(
+                    f"Service Extension XFF Header for source ip ({client_ipv4}) matched ({matched_ipv4_cidr}) denied range"
+                )
             return custom_response(
                 service_pb2.StatusCode.Forbidden,
-                f"Requests for source ip ({source_ip}) was denied",
+                f"Requests for source ip ({client_ipv4}) was denied",
             )
+    return None  # Return if no Validation Issue
 
 
 scoped_header_actions = {
@@ -173,27 +245,40 @@ class CalloutProcessor(service_pb2_grpc.ExternalProcessorServicer):
             if request.HasField("request_headers"):
                 try:
                     scoped_headers = []
-                    if environ.get("se_require_iap"):
-                        if environ.get("se_test") == True:
-                            scoped_headers.append("x-goog-iap-jwt-assertion-test")
-                        else:
-                            scoped_headers.append("x-goog-iap-jwt-assertion")
-                    if environ.get("se_allowed_sources") or environ.get(
-                        "se_denied_sources"
+                    IAP_JWT_HEADER = "x-goog-iap-jwt-assertion"
+                    if SERVICE_EXTENSION_REQUIRE_IAP:
+                        if SERVICE_EXTENSION_TEST:
+                            IAP_JWT_HEADER = "x-goog-iap-jwt-assertion-test"
+
+                        if SERVICE_EXTENSION_DEBUG:
+                            print(f"Service Extension IAP Header: {IAP_JWT_HEADER}")
+                        scoped_headers.append(IAP_JWT_HEADER)
+
+                    XFF_HEADER = "x-forwarded-for"
+                    if (
+                        SERVICE_EXTENSION_ALLOWED_IPV4_CIDR_RANGES
+                        or SERVICE_EXTENSION_DENIED_IPV4_CIDR_RANGES
                     ):
-                        if environ.get("se_test") == True:
-                            scoped_headers.append("x-forwarded-for-test")
-                        else:
-                            scoped_headers.append("x-forwarded-for")
+                        if SERVICE_EXTENSION_TEST:
+                            XFF_HEADER = "x-forwarded-for-test"
+
+                        if SERVICE_EXTENSION_DEBUG:
+                            print(f"Service Extension XFF Header: {XFF_HEADER}")
+                        scoped_headers.append(XFF_HEADER)
 
                     request_headers = request.request_headers.headers
-                    print(scoped_headers)
+
+                    if SERVICE_EXTENSION_DEBUG:
+                        print(f"Service Extension in Scope Headers: {scoped_headers}")
                     for header in request_headers.headers:
-                        print(f"Header name is => {header.key}")
-                        header_value = header.value or header.raw_value.decode(
-                            "utf-8", "ignore"
-                        )
                         if header.key in scoped_headers:
+                            header_value = header.value or header.raw_value.decode(
+                                "utf-8", "ignore"
+                            )
+                            if SERVICE_EXTENSION_DEBUG:
+                                print(
+                                    f"Service Extension Scoped Header: {header.key}, Value {header_value}"
+                                )
                             response_generator = scoped_header_actions[header.key](
                                 header_value
                             )
@@ -203,6 +288,18 @@ class CalloutProcessor(service_pb2_grpc.ExternalProcessorServicer):
                                 return
                         if not scoped_headers:
                             break
+                    # Checks if IAP was required but header was not detected
+                    if SERVICE_EXTENSION_REQUIRE_IAP and (
+                        IAP_JWT_HEADER in scoped_headers
+                    ):
+                        if SERVICE_EXTENSION_DEBUG:
+                            print(
+                                f"Service Extension IAP Required Header but Not Found"
+                            )
+                        response_generator = scoped_header_actions[IAP_JWT_HEADER]("")
+                        if response_generator:
+                            yield from response_generator
+                            return
 
                     request_header_mutation = service_pb2.HeadersResponse()
                     request_header_mutation.response.clear_route_cache = True
@@ -215,9 +312,24 @@ class CalloutProcessor(service_pb2_grpc.ExternalProcessorServicer):
 
 class HealthCheckServer(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
-        "Returns an empty page with 200 status code"
-        self.send_response(200)
-        self.end_headers()
+        # Check if the request is for the specific file
+        if self.path == "/iap_public_key.crt":
+            try:
+                self.send_response(200)
+                self.send_header("Content-type", "application/x-x509-ca-cert")
+                self.end_headers()
+                self.wfile.write(IAP_CERTIFICATE)
+            except FileNotFoundError:
+                # Handle the case where the file is not found
+                self.send_response(404)
+                self.end_headers()
+                self.wfile.write(b"File not found")
+        else:
+            # Default response for other paths
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"OK")
 
 
 def serve() -> None:
