@@ -92,8 +92,8 @@ jobs:
         if: success() # Only push if tests succeed
         uses: docker/build-push-action@v5.1.0
         with:
-          context: ./nginx_echo
-          file: ./nginx_echo/Dockerfile
+          context: ./service_extension_waf
+          file: ./service_extension_waf/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
