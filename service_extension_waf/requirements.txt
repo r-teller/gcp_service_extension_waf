@@ -3,3 +3,4 @@ grpcio==1.59.0
 grpcio-tools==1.59.0
 google-auth==2.23.4
 cryptography==41.0.5
+simplejson==3.19.2

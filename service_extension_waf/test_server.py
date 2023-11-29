@@ -1,21 +1,7 @@
-# Copyright 2023 Google LLC.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 from __future__ import print_function
 
 import threading
 import urllib.request
-
 import grpc
 import pytest
 
@@ -23,38 +9,54 @@ import server
 import service_pb2
 import service_pb2_grpc
 
+from os import environ
+from typing import Iterator, List, Tuple
+
 
 def get_request(
-    end_of_stream: bool = False, is_request_header: bool = True
+    end_of_stream: bool = False,
+    is_request_header: bool = True,
+    custom_headers: List[Tuple[str, str]] = [],
 ) -> service_pb2.ProcessingRequest:
-    "Returns a ProcessingRequest"
-    _headers = service_pb2.HttpHeaders(
-        end_of_stream=end_of_stream,
-    )
+    """Returns a ProcessingRequest"""
+
     if is_request_header:
-        request = service_pb2.ProcessingRequest(
-            request_headers=_headers, async_mode=False
+        headers_map = service_pb2.HeaderMap(
+            headers=[
+                service_pb2.HeaderValue(key=key, raw_value=bytes(value, "utf-8"))
+                for key, value in custom_headers
+            ]
         )
-    else:
-        request = service_pb2.ProcessingRequest(
-            response_headers=_headers, async_mode=False
+        _headers = service_pb2.HttpHeaders(
+            headers=headers_map,
+            end_of_stream=end_of_stream,
         )
-    return request
+        request = service_pb2.ProcessingRequest(
+            request_headers=_headers,
+            async_mode=False,
+        )
+        return request
+    return None
 
 
-def get_requests_stream() -> service_pb2.ProcessingRequest:
-    request = get_request(end_of_stream=False, is_request_header=True)
+def get_requests_stream(
+    custom_headers: List[Tuple[str, str]]
+) -> Iterator[service_pb2.ProcessingRequest]:
+    """Generator for requests stream"""
+    request = get_request(
+        end_of_stream=True,
+        is_request_header=True,
+        custom_headers=custom_headers,
+    )
     yield request
-    request = get_request(end_of_stream=False, is_request_header=False)
-    yield request
-    request = get_request(end_of_stream=True)
-    yield request
+    # Add additional requests if needed
 
 
+# @pytest.fixture(scope="session", autouse=True)
 @pytest.fixture(scope="module")
 def setup_and_teardown() -> None:
+    thread = None
     try:
-        # Start the server in a background thread
         thread = threading.Thread(target=server.serve)
         thread.daemon = True
         thread.start()
@@ -62,39 +64,61 @@ def setup_and_teardown() -> None:
         thread.join(timeout=5)
         yield
     finally:
-        # Stop the server
-        del thread
+        if thread is not None:
+            # Stop the server
+            del thread
+
+
+def test_with_custom_headers(headers: List[Tuple[str, str]]) -> None:
+    """Test function that creates a channel and sends a request with custom headers."""
+    channel = grpc.insecure_channel(f"0.0.0.0:{server.EXT_PROC_INSECURE_PORT}")
+    result = environ.get("se_result").lower()
+    test_case  = environ.get("se_test_case")
+    try:
+        stub = service_pb2_grpc.ExternalProcessorStub(channel)
+        for response in stub.Process(get_requests_stream(headers)):
+            str_message = str(response)
+            print(str_message)
+            print(result)
+            if result == "fail":
+                assert response.HasField("immediate_response")
+            else:
+                assert response.HasField("request_headers")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        raise Exception(f"Test '{test_case}': was expected to {result}")
+    finally:
+        channel.close()
+
+
+import json
 
 
 @pytest.mark.usefixtures("setup_and_teardown")
 def test_server() -> None:
-    try:
-        with grpc.insecure_channel(
-            f"0.0.0.0:{server.EXT_PROC_INSECURE_PORT}"
-        ) as channel:
-            stub = service_pb2_grpc.ExternalProcessorStub(channel)
-            for response in stub.Process(get_requests_stream()):
-                str_message = str(response)
-                if "request_headers" in str_message:
-                    assert 'raw_value: "service-extensions.com"' in str_message
-                    assert 'key: "host"' in str_message
-                elif "response_headers" in str_message:
-                    assert 'raw_value: "service-extensions"' in str_message
-                    assert 'key: "hello"' in str_message
-    except grpc._channel._MultiThreadedRendezvous:
-        raise Exception("Setup Error: Server not ready!")
+    headers_str = environ.get("se_headers", "[]")
+    headers_json = json.loads(headers_str)
+    headers_tuple: List[Tuple[str, str]] = [(key, value) for d in headers_json for key, value in d.items()]
+
+    test_with_custom_headers(headers_tuple)
 
 
 @pytest.mark.usefixtures("setup_and_teardown")
 def test_server_health_check() -> None:
     try:
         response = urllib.request.urlopen(f"http://0.0.0.0:{server.HEALTH_CHECK_PORT}")
-        assert response.read() == b""
+        assert response.read() == b"OK"
+        print(f"Verify Health Check Status: {response.getcode()}")
         assert response.getcode() == 200
+        response = urllib.request.urlopen(
+            f"http://0.0.0.0:{server.HEALTH_CHECK_PORT}/iap_public_key.crt"
+        )
+        assert response.getcode() == 200
+        print(f"Verify IAP Cert downloaded: {response.read().decode('utf-8')}")
     except urllib.error.URLError:
         raise Exception("Setup Error: Server not ready!")
 
 
 if __name__ == "__main__":
-    # Run the gRPC service
+    # Run the gRPC service tests
     test_server()

@@ -75,6 +75,25 @@ jobs:
         with:
           context: ./service_extension_waf
           file: ./service_extension_waf/Dockerfile
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}:test
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Test container before pushing it
+      # https://docs.docker.com/build/ci/github-actions/test-before-push/
+      - name: Run the Docker Container
+        run: |
+          docker run --rm --name test-container -d --entrypoint "./test_server.sh" ${{ env.REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}:test
+
+      - name: Push Docker Image
+        id: push-image
+        if: success() # Only push if tests succeed
+        uses: docker/build-push-action@v5.1.0
+        with:
+          context: ./nginx_echo
+          file: ./nginx_echo/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -87,6 +106,7 @@ jobs:
       # transparency data even for private images, pass --force to cosign below.
       # https://github.com/sigstore/cosign
       - name: Sign the published Docker image
+        # if: 
         # env:
           # DIGEST: ${{ steps.build-and-push.outputs.digest }}
           # TAGS: ${{ steps.docker_meta.outputs.tags }}
