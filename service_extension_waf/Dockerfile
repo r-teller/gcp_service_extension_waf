@@ -16,7 +16,7 @@ WORKDIR /home/callouts
 COPY . .
 RUN apt-get update && apt-get install -y python3-pip python3-grpc-tools curl
 RUN pip install --break-system-packages  -r ./requirements.txt -r ./requirements-test.txt
-
+RUN chmod +x ./test_server.sh
 ## On build download the latest IAP Certificate that is used to validate IAP JWT
 RUN curl https://www.gstatic.com/iap/verify/public_key -o ./iap_public_key.crt
 
