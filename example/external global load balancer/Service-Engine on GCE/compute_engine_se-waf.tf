@@ -149,7 +149,7 @@ locals {
     extensionChains = [
       {
         name           = "chain-1"
-        matchCondition = { celExpression = "request.host == '*'" }
+        matchCondition = { celExpression = "request.path.startsWith('/')" }
         extensions = [
           {
             name      = "extension-1"
