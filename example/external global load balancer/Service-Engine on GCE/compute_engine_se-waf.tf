@@ -176,6 +176,7 @@ resource "local_file" "backend_service_yaml" {
     when    = create
     command = "gcloud compute backend-services import --global ${local.backend_service_name} --source=${self.filename} --quiet"
   }
+  depends_on = [google_compute_instance_group.gce_se_waf_instance_group]
 }
 
 resource "null_resource" "backend_service_yaml_destroy" {
@@ -201,7 +202,7 @@ resource "local_file" "service_extension_yaml" {
     command = "gcloud beta service-extensions lb-traffic-extensions import ${local.service_extension_name} --source=${self.filename} --location=global --quiet"
   }
 
-  depends_on = [local_file.backend_service_yaml]
+  depends_on = [local_file.backend_service_yaml, google_compute_instance_group.gce_se_waf_instance_group]
 }
 
 resource "null_resource" "service_extension_yaml_destroy" {
