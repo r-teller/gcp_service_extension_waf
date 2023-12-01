@@ -43,6 +43,7 @@ terraform.rc
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
 # C extensions
 *.so
@@ -61,8 +62,6 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
-
-iap_public_key.crt
 
 # Installer logs
 pip-log.txt

@@ -3,7 +3,7 @@ resource "google_cloud_run_service" "cloudrun_srv_echo" {
   for_each = toset(var.regions)
 
   project  = var.project_id
-  name     = format("cloudrun-srv-echo-%s", module.gcp_utils.region_short_name_map[lower(each.key)])
+  name     = format("cloudrun-srv-echo-%s-%s", module.gcp_utils.region_short_name_map[lower(each.key)], random_id.id.hex)
   location = each.key
 
   template {
@@ -50,7 +50,7 @@ resource "google_cloud_run_service_iam_policy" "cloudrun_srv_echo_noauth" {
 resource "google_compute_backend_service" "cloudrun_srv_echo_backend" {
   project = var.project_id
 
-  name = "l7-xlb-echo-backend-service"
+  name = format("l7-xlb-echo-backend-service-%s", random_id.id.hex)
 
   load_balancing_scheme  = "EXTERNAL_MANAGED"
   protocol               = "HTTPS"
@@ -71,7 +71,7 @@ resource "google_compute_region_network_endpoint_group" "cloudrun_srv_echo_neg" 
 
   project = each.value.project
 
-  name                  = format("cloudrun-neg-echo-%s", module.gcp_utils.region_short_name_map[lower(each.key)])
+  name                  = format("cloudrun-neg-echo-%s-%s", module.gcp_utils.region_short_name_map[lower(each.key)], random_id.id.hex)
   network_endpoint_type = "SERVERLESS"
   region                = each.key
   cloud_run {

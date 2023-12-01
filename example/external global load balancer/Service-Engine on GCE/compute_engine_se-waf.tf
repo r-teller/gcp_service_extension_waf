@@ -1,9 +1,10 @@
+
 resource "google_compute_instance" "gce_se_waf" {
   for_each = toset(var.regions)
 
   project = var.project_id
 
-  name = format("compute-engine-se-waf-%s", module.gcp_utils.region_short_name_map[lower(each.key)])
+  name = format("compute-engine-se-waf-%s-%s", module.gcp_utils.region_short_name_map[lower(each.key)], random_id.id.hex)
   zone = data.google_compute_zones.zones[each.key].names[0]
 
   boot_disk {
@@ -31,7 +32,7 @@ resource "google_compute_instance" "gce_se_waf" {
         "containers" : [
           {
             "name" : "instance-1",
-            "image" : "rteller/se-waf:0.0.3-beta",
+            "image" : "rteller/se-waf:0.0.4-beta",
             "env" : [
               {
                 "name" : "se_debug",
@@ -40,6 +41,14 @@ resource "google_compute_instance" "gce_se_waf" {
               {
                 "name" : "se_allowed_ipv4_cidr_ranges",
                 "value" : "1.1.1.1/32"
+              },
+              {
+                "name" : "se_denied_ipv4_cidr_ranges",
+                "value" : "1.0.0.0/8"
+              },
+              {
+                "name" : "se_denied_ipv4_cidr_ranges",
+                "value" : "0.0.0.0/0"
               }
             ],
             "stdin" : false,
@@ -87,7 +96,7 @@ resource "google_compute_instance" "gce_se_waf" {
 resource "google_compute_health_check" "gce_se_waf_hc" {
   project = var.project_id
 
-  name = "health-check-se-waf-8000"
+  name = format("health-check-se-waf-8000-%s", random_id.id.hex)
   http_health_check {
     port = 8000
   }
@@ -98,7 +107,7 @@ resource "google_compute_instance_group" "gce_se_waf_instance_group" {
 
   project = var.project_id
 
-  name    = format("l7-xlb-se-waf-instance-group-%s", module.gcp_utils.region_short_name_map[lower(each.key)])
+  name    = format("l7-xlb-se-waf-instance-group-%s-%s", module.gcp_utils.region_short_name_map[lower(each.key)], random_id.id.hex)
   zone    = data.google_compute_zones.zones[each.key].names[0]
   network = google_compute_network.vpc_network.id
 
@@ -113,7 +122,7 @@ resource "google_compute_instance_group" "gce_se_waf_instance_group" {
 }
 
 locals {
-  backend_service_name = "l7-xlb-se-waf-backend-service"
+  backend_service_name = format("l7-xlb-se-waf-backend-service-%s", random_id.id.hex)
   backend_service_json = yamlencode({
     "name" : local.backend_service_name,
     "affinityCookieTtlSec" : 0,
@@ -138,7 +147,7 @@ locals {
     "timeoutSec" : 30
   })
 
-  service_extension_name = "l7-xlb-echo-service-engine-waf"
+  service_extension_name = format("l7-xlb-echo-service-engine-waf-%s", random_id.id.hex)
   service_extension_yaml = yamlencode({
     name = local.service_extension_name
     forwardingRules = [

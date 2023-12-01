@@ -288,24 +288,23 @@ class CalloutProcessor(service_pb2_grpc.ExternalProcessorServicer):
                         scoped_headers.append(XFF_HEADER)
 
                     request_headers = request.request_headers.headers
-                    print(request_headers)
+
                     if SERVICE_EXTENSION_DEBUG:
                         print(f"Service Extension in Scope Headers: {scoped_headers}")
 
                     for header in request_headers.headers:
-                        print(f"Service Extension Scoped Header: {header.key}")
                         if header.key in scoped_headers or (
                             SERVICE_EXTENSION_DEBUG and header.key in debug_headers
                         ):
                             header_value = header.value or header.raw_value.decode(
                                 "utf-8", "ignore"
                             )
-                            if SERVICE_EXTENSION_DEBUG:
-                                print(
-                                    f"Service Extension Scoped Header: {header.key}, Value {header_value}"
-                                )
 
-                            if header.key in scoped_headers:
+                            if header.key in scoped_headers:                                
+                                if SERVICE_EXTENSION_DEBUG:
+                                    print(
+                                        f"Service Extension Scoped Header: {header.key}, Value {header_value}"
+                                    )
                                 response_generator = scoped_header_actions[header.key](
                                     header_value
                                 )
