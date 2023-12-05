@@ -5,7 +5,7 @@ resource "random_id" "id" {
 resource "random_integer" "region_number" {
   for_each = toset(var.regions)
   min      = 0
-  max      = 255
+  max      = 254
 
   seed = each.key
 }

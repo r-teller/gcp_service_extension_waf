@@ -40,7 +40,7 @@ resource "google_compute_global_address" "default" {
   name     = format("l7-xlb-static-ip-%s", random_id.id.hex)
 }
 
-resource "google_compute_global_forwarding_rule" "cloudrun_srv_echo_forwarding_80" {
+resource "google_compute_global_forwarding_rule" "gcr_echo_xlb_forwarding_80" {
   project = var.project_id
 
   name                  = format("l7-xlb-echo-forwarding-rule-http-%s", random_id.id.hex)
@@ -51,7 +51,7 @@ resource "google_compute_global_forwarding_rule" "cloudrun_srv_echo_forwarding_8
   ip_address            = google_compute_global_address.default.id
 }
 
-resource "google_compute_target_http_proxy" "cloudrun_srv_echo_http" {
+resource "google_compute_target_http_proxy" "gcr_echo_http" {
   project = var.project_id
 
   name    = format("l7-xlb-echo-target-http-proxy-%s", random_id.id.hex)
@@ -80,7 +80,7 @@ resource "google_compute_target_https_proxy" "cloudrun_srv_echo_https" {
 
 
 
-resource "google_compute_url_map" "cloudrun_srv_echo_url_map" {
+resource "google_compute_url_map" "gcr_echo_url_map" {
   project = var.project_id
 
   name            = format("l7-xlb-echo-url-map-%s", random_id.id.hex)

@@ -47,7 +47,7 @@ resource "google_compute_instance" "gce_se_waf" {
                 "value" : "1.0.0.0/8"
               },
               {
-                "name" : "se_denied_ipv4_cidr_ranges",
+                "name" : "se_allowed_ipv4_cidr_ranges",
                 "value" : "0.0.0.0/0"
               }
             ],
