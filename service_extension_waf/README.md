@@ -5,18 +5,18 @@ This Python application serves as a lightweight Web Application Firewall (WAF) i
 
 ### Key Features
 - **IAP JWT Validation**: Validates Identity-Aware Proxy (IAP) JSON Web Tokens (JWTs) to ensure they are valid. This feature can be controlled using the environment flag `se_require_iap`, which defaults to `False`.
-- **Source IP Validation**: Checks whether the client's source IP is explicitly allowed or denied based on specified IPv4 CIDR ranges.
-  - This feature is controlled by the flags `se_allowed_ipv4_cidr_ranges` (default: `0.0.0.0/0`) and `se_denied_ipv4_cidr_ranges`.
+- **Source IP Validation**: Checks whether the client's source IP is explicitly allowed or denied based on a comma separated list of specified IPv4 CIDR ranges.
+  - This feature is controlled by the flags `se_allowed_ipv4_cidr_ranges` (default: `0.0.0.0/0`) and `se_denied_ipv4_cidr_ranges` (default: None).
 - **Debugging**: Offers debugging capabilities, which can be enabled through the `se_debug` environment flag, defaulting to `False`.
 
 ### Environment Variables
-| Environment Variable | Default Value | Description | Acceptable Values |
-|----------------------|---------------|-------------|-------------------|
-| `se_debug`          | `False`       | Enables or disables debug logging. | `True`, `False` |
-| `se_test`           | `False`       | Activates test mode, which may alter certain behaviors for testing purposes. | `True`, `False` |
-| `se_require_iap`     | `False`       | Enables or disables the validation of IAP JWTs. | `True`, `False` |
-| `se_allowed_ipv4_cidr_ranges` | None | Specifies the IPv4 CIDR ranges that are explicitly allowed. | CIDR ranges (e.g., `192.168.1.0/24`) |
-| `se_denied_ipv4_cidr_ranges` | None        | Specifies the IPv4 CIDR ranges that are explicitly denied. | CIDR ranges (e.g., `192.168.1.0/24`) |
+| Environment Variable          | Default Value | Description                                                                  | Acceptable Values                                           |
+| ----------------------------- | ------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `se_debug`                    | `False`       | Enables or disables debug logging.                                           | `True`, `False`                                             |
+| `se_test`                     | `False`       | Activates test mode, which may alter certain behaviors for testing purposes. | `True`, `False`                                             |
+| `se_require_iap`              | `False`       | Enables or disables the validation of IAP JWTs.                              | `True`, `False`                                             |
+| `se_allowed_ipv4_cidr_ranges` | `0.0.0.0\0`   | Specifies the IPv4 CIDR ranges that are explicitly allowed.                  | List of CIDR ranges (e.g., `192.168.1.0/24,192.168.2.0/24`) |
+| `se_denied_ipv4_cidr_ranges`  | None          | Specifies the IPv4 CIDR ranges that are explicitly denied.                   | List of CIDR ranges (e.g., `192.168.1.0/24`)                |
 
 ### Components
 - **gRPC Server**: The core of the application, handling incoming processing requests and generating appropriate responses.

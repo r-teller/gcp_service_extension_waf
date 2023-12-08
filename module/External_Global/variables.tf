@@ -18,29 +18,19 @@ variable "create_se_waf_traffic_extension" {
 }
 
 variable "global_se_waf_env" {
-  type = list(object({
-    name  = string
-    value = string
-  }))
+  type = object({
+    se_debug                    = optional(bool, false),
+    se_require_iap              = optional(bool, false),
+    se_allowed_ipv4_cidr_ranges = optional(list(string), null)
+    se_denied_ipv4_cidr_ranges  = optional(list(string), null)
+  })
 
-  default = [
-    {
-      name  = "se_debug",
-      value = "False",
-    },
-    {
-      name  = "se_require_iap",
-      value = "False"
-    },
-    {
-      "name" : "se_allowed_ipv4_cidr_ranges",
-      "value" : "0.0.0.0/0"
-    },
-    {
-      "name" : "se_denied_ipv4_cidr_ranges",
-      "value" : ""
-    }
-  ]
+  default = {
+    se_debug                    = false,
+    se_require_iap              = false,
+    se_allowed_ipv4_cidr_ranges = null
+    se_denied_ipv4_cidr_ranges  = null
+  }
 }
 
 variable "instance_configurations" {
@@ -51,10 +41,12 @@ variable "instance_configurations" {
     instance_count = optional(number, 1)
     machine_type   = optional(string, "n2-standard-2")
     container_id   = optional(string, "rteller/se-waf:0.0.4-beta"),
-    se_waf_env = optional(list(object({
-      name  = string
-      value = string
-    })), null)
+    se_waf_env = optional(object({
+      se_debug                    = optional(bool, null),
+      se_require_iap              = optional(bool, null),
+      se_allowed_ipv4_cidr_ranges = optional(list(string), null)
+      se_denied_ipv4_cidr_ranges  = optional(list(string), null)
+    }))
   }))
 
   validation {

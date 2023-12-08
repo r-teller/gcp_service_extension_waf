@@ -20,7 +20,36 @@ locals {
         subnetwork   = configuration.subnetwork
         container_id = configuration.container_id
         machine_type = configuration.machine_type
-        env          = coalesce(configuration.se_waf_env, var.global_se_waf_env)
+        env = [
+          {
+            name = "se_debug",
+            value = tostring(coalesce(
+              try(configuration.se_waf_env.se_debug, null),
+              var.global_se_waf_env.se_debug,
+            ))
+          },
+          {
+            name = "se_require_iap",
+            value = tostring(coalesce(
+              try(configuration.se_waf_env.se_require_iap, null),
+              var.global_se_waf_env.se_require_iap,
+            ))
+          },
+          {
+            name = "se_allowed_ipv4_cidr_ranges",
+            value = try(join(",", coalesce(
+              try(configuration.se_waf_env.se_allowed_ipv4_cidr_ranges, null),
+              var.global_se_waf_env.se_allowed_ipv4_cidr_ranges,
+            )), "")
+          },
+          {
+            name = "se_denied_ipv4_cidr_ranges",
+            value = try(join(",", coalesce(
+              try(configuration.se_waf_env.se_denied_ipv4_cidr_ranges, null),
+              var.global_se_waf_env.se_denied_ipv4_cidr_ranges,
+            )), "")
+          }
+        ]
       }
     ]
     ]) : format("gce-cos-se-waf-%s-%02d", instance.zone, instance.idx) => merge(instance, {

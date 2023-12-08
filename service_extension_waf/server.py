@@ -49,7 +49,7 @@ from google.auth.transport import requests
 from google.oauth2 import id_token
 
 # Used to validate IPv4 addresses
-from ipaddress import ip_network, ip_address
+from ipaddress import ip_network, ip_address, get_mixed_type_key
 
 from os import environ
 
@@ -81,6 +81,9 @@ SERVICE_EXTENSION_ALLOWED_IPV4_CIDR_RANGES = environ.get(
 SERVICE_EXTENSION_DENIED_IPV4_CIDR_ENABLED = environ.get("se_denied_ipv4_cidr_ranges")
 SERVICE_EXTENSION_DENIED_IPV4_CIDR_RANGES = environ.get("se_denied_ipv4_cidr_ranges")
 
+# Declare global variable
+global_sorted_ipv4_cidr_ranges = None
+
 if SERVICE_EXTENSION_DEBUG:
     print(f"Service Extension Test Mode: {SERVICE_EXTENSION_TEST}")
     print(f"Service Extension Require IAP: {SERVICE_EXTENSION_REQUIRE_IAP}")
@@ -91,6 +94,45 @@ if SERVICE_EXTENSION_DEBUG:
         f"Service Extension Denied Source Ranges: {SERVICE_EXTENSION_DENIED_IPV4_CIDR_RANGES}"
     )
 
+def sort_ipv4_cidr_ranges() -> None:
+    global global_sorted_ipv4_cidr_ranges 
+    allowed_ipv4_cidr_ranges = []
+    denied_ipv4_cidr_ranges = []
+
+    if SERVICE_EXTENSION_ALLOWED_IPV4_CIDR_RANGES:
+        allowed_ipv4_cidr_ranges = [
+            allowed_ipv4_cidr.strip()
+            for allowed_ipv4_cidr in SERVICE_EXTENSION_ALLOWED_IPV4_CIDR_RANGES.split(
+                ","
+            )
+            if allowed_ipv4_cidr.strip()
+        ]
+    if SERVICE_EXTENSION_DENIED_IPV4_CIDR_RANGES:
+        denied_ipv4_cidr_ranges = [
+            denied_ipv4_cidr.strip()
+            for denied_ipv4_cidr in SERVICE_EXTENSION_DENIED_IPV4_CIDR_RANGES.split(",")
+            if denied_ipv4_cidr.strip()
+        ]
+
+    combined_ipv4_cidr_ranges = [
+        (ip_network(cidr), "deny") for cidr in denied_ipv4_cidr_ranges
+    ] + [(ip_network(cidr), "allow") for cidr in allowed_ipv4_cidr_ranges]
+
+    global_sorted_ipv4_cidr_ranges = sorted(
+        combined_ipv4_cidr_ranges,
+        key=lambda x: get_mixed_type_key(x[0]),
+        reverse=True,
+    )
+
+    if SERVICE_EXTENSION_DEBUG:
+        formatted_sorted_ipv4_cidr_ranges = [
+            (str(cidr_network), action)
+            for cidr_network, action in global_sorted_ipv4_cidr_ranges
+        ]
+        print(
+            f"Service Extension XFF Header sorted CIDR Ranges: {formatted_sorted_ipv4_cidr_ranges}"
+        )
+    return None
 
 # [END serviceextensions_callout_add_header_imports]
 # [START serviceextensions_callout_add_header_main]
@@ -166,45 +208,13 @@ def handle_xff_validation(header_value):
     allow_request = False
     deny_request = False
     matched_ipv4_cidr = None
-    allowed_ipv4_cidr_ranges = []
-    denied_ipv4_cidr_ranges = []
     xff_list = [ip.strip() for ip in header_value.split(",") if ip.strip()]
 
     if len(xff_list) >= 2:
-        client_ipv4 = xff_list[-2]
-        if SERVICE_EXTENSION_ALLOWED_IPV4_CIDR_RANGES:
-            allowed_ipv4_cidr_ranges = [
-                allowed_ipv4_cidr.strip()
-                for allowed_ipv4_cidr in SERVICE_EXTENSION_ALLOWED_IPV4_CIDR_RANGES.split(
-                    ","
-                )
-                if allowed_ipv4_cidr.strip()
-            ]
-        if SERVICE_EXTENSION_DENIED_IPV4_CIDR_RANGES:
-            denied_ipv4_cidr_ranges = [
-                denied_ipv4_cidr.strip()
-                for denied_ipv4_cidr in SERVICE_EXTENSION_DENIED_IPV4_CIDR_RANGES.split(
-                    ","
-                )
-                if denied_ipv4_cidr.strip()
-            ]
-
-        combined_ipv4_cidr_ranges = [
-            (cidr, "deny") for cidr in denied_ipv4_cidr_ranges
-        ] + [(cidr, "allow") for cidr in allowed_ipv4_cidr_ranges]
-        sorted_ipv4_cidr_ranges = sorted(
-            combined_ipv4_cidr_ranges,
-            key=lambda x: int(x[0].split("/")[1]),
-            reverse=True,
-        )
-
-        if SERVICE_EXTENSION_DEBUG:
-            print(
-                f"Service Extension XFF Header sorted CIDR Ranges: {sorted_ipv4_cidr_ranges}"
-            )
-
-        for cidr, action in sorted_ipv4_cidr_ranges:
-            if ip_address(client_ipv4) in ip_network(cidr):
+        client_ipv4 = ip_address(xff_list[-2])
+        print(list(global_sorted_ipv4_cidr_ranges))
+        for cidr, action in global_sorted_ipv4_cidr_ranges:
+            if client_ipv4 in cidr:
                 matched_ipv4_cidr = cidr
                 if action == "allow":
                     allow_request = True
@@ -217,7 +227,7 @@ def handle_xff_validation(header_value):
         if SERVICE_EXTENSION_DEBUG:
             print(
                 f"""Service Extension XFF Header result:
-                    Source IPv4 ({client_ipv4})
+                    Source IPv4: {client_ipv4}
                     Deny Request: {deny_request}
                     Allow Request: {allow_request}
                     Matched IPv4 CIDR: {matched_ipv4_cidr}"""
@@ -300,7 +310,7 @@ class CalloutProcessor(service_pb2_grpc.ExternalProcessorServicer):
                                 "utf-8", "ignore"
                             )
 
-                            if header.key in scoped_headers:                                
+                            if header.key in scoped_headers:
                                 if SERVICE_EXTENSION_DEBUG:
                                     print(
                                         f"Service Extension Scoped Header: {header.key}, Value {header_value}"
@@ -363,6 +373,7 @@ class HealthCheckServer(BaseHTTPRequestHandler):
 
 
 def serve() -> None:
+    sort_ipv4_cidr_ranges()
     "Run gRPC server and Health check server"
     health_server = HTTPServer(("0.0.0.0", HEALTH_CHECK_PORT), HealthCheckServer)
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
