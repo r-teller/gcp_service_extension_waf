@@ -47,7 +47,7 @@ resource "google_compute_global_forwarding_rule" "gcr_echo_xlb_forwarding_80" {
   ip_protocol           = "TCP"
   load_balancing_scheme = "EXTERNAL_MANAGED"
   port_range            = "80"
-  target                = google_compute_target_http_proxy.cloudrun_srv_echo_http.id
+  target                = google_compute_target_http_proxy.gcr_echo_http.id
   ip_address            = google_compute_global_address.default.id
 }
 
@@ -55,26 +55,26 @@ resource "google_compute_target_http_proxy" "gcr_echo_http" {
   project = var.project_id
 
   name    = format("l7-xlb-echo-target-http-proxy-%s", random_id.id.hex)
-  url_map = google_compute_url_map.cloudrun_srv_echo_url_map.id
+  url_map = google_compute_url_map.gcr_echo_url_map.id
 }
 
-resource "google_compute_global_forwarding_rule" "cloudrun_srv_echo_forwarding_443" {
+resource "google_compute_global_forwarding_rule" "gcr_echo_xlb_forwarding_443" {
   project = var.project_id
 
   name                  = format("l7-xlb-echo-forwarding-rule-https-%s", random_id.id.hex)
   ip_protocol           = "TCP"
   load_balancing_scheme = "EXTERNAL_MANAGED"
   port_range            = "443"
-  target                = google_compute_target_https_proxy.cloudrun_srv_echo_https.id
+  target                = google_compute_target_https_proxy.gcr_echo_https.id
   ip_address            = google_compute_global_address.default.id
 }
 
-resource "google_compute_target_https_proxy" "cloudrun_srv_echo_https" {
+resource "google_compute_target_https_proxy" "gcr_echo_https" {
   project = var.project_id
 
   name             = format("l7-xlb-echo-target-https-proxy-%s", random_id.id.hex)
   quic_override    = "DISABLE"
-  url_map          = google_compute_url_map.cloudrun_srv_echo_url_map.id
+  url_map          = google_compute_url_map.gcr_echo_url_map.id
   ssl_certificates = [google_compute_ssl_certificate.default.id]
 }
 
@@ -84,6 +84,6 @@ resource "google_compute_url_map" "gcr_echo_url_map" {
   project = var.project_id
 
   name            = format("l7-xlb-echo-url-map-%s", random_id.id.hex)
-  default_service = google_compute_backend_service.cloudrun_srv_echo_backend.id
+  default_service = google_compute_backend_service.gcr_echo_backend.id
 }
 

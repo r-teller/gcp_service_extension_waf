@@ -1,0 +1,14 @@
+${
+    join("", [
+        {
+        asia         = "az"
+        australia    = "au"
+        europe       = "eu"
+        northamerica = "na"
+        southamerica = "sa"
+        us           = "us"
+        me           = "me"
+    }[split("-", zone)[0]],
+        replace(join("", slice(split("-", zone), 1, 3)), "/(n)orth|(s)outh|(e)ast|(w)est|(c)entral/", "$1$2$3$4$5")
+    ])
+}
