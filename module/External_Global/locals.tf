@@ -10,6 +10,9 @@
 # }
 
 locals {
+  create_se_waf_backend_service   = alltrue([var.create_se_waf_backend_service, length(google_compute_instance_group.gce_se_waf_ig) > 0])
+  create_se_waf_traffic_extension = alltrue([var.create_se_waf_traffic_extension, local.create_se_waf_backend_service])
+
   random_suffix = try(var.random_suffix, random_id.suffix.hex)
 
   instance_configurations = { for instance in flatten([
@@ -96,14 +99,24 @@ locals {
     extensionChains = [
       {
         name           = "chain-1"
-        matchCondition = { celExpression = "request.path.startsWith('/')" }
+        matchCondition = { celExpression = "request.path.startsWith('/') && !request.path.endsWith('.css') && !request.path.endsWith('/favicon.ico')" }
         extensions = [
           {
             name      = "extension-1"
-            authority = "demo.com"
-            service   = format("https://www.googleapis.com/compute/v1/projects/%s/global/backendServices/%s", var.project_id, local.backend_service_spec.name)
-            failOpen  = false
-            timeout   = "0.2s"
+            authority = "demo.com",
+            forwardHeaders = [
+              ":method",
+              ":scheme",
+              ":authority",
+              ":path",
+              "x-forwarded-for",
+              "x-forwarded-for-test",
+              "x-goog-iap-jwt-assertion",
+              "x-goog-iap-jwt-assertion-test"
+            ],
+            service  = format("https://www.googleapis.com/compute/v1/projects/%s/global/backendServices/%s", var.project_id, local.backend_service_spec.name)
+            failOpen = false
+            timeout  = "0.2s"
             supportedEvents = [
               "REQUEST_HEADERS"
             ]

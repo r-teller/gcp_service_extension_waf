@@ -1,5 +1,5 @@
 resource "google_compute_health_check" "gce_se_waf_hc" {
-  count   = alltrue([var.create_se_waf_backend_service]) ? 1 : 0
+  count = local.create_se_waf_backend_service ? 1 : 0
 
   project = var.project_id
 
@@ -11,7 +11,7 @@ resource "google_compute_health_check" "gce_se_waf_hc" {
 
 ## Work around to handle IAP flag being set in backend when not compatible with Service-Extension
 resource "local_file" "backend_service" {
-  count   = alltrue([var.create_se_waf_backend_service]) ? 1 : 0
+  count = local.create_se_waf_backend_service ? 1 : 0
 
   content  = jsonencode(local.backend_service_spec)
   filename = format("%s/.staging/%s_backend_service.json", path.module, "glbl")
@@ -21,18 +21,27 @@ resource "local_file" "backend_service" {
     google_compute_health_check.gce_se_waf_hc,
     google_compute_instance_group.gce_se_waf_ig,
   ]
+
+  lifecycle {
+    replace_triggered_by = [
+      google_compute_instance_group.gce_se_waf_ig
+    ]
+  }
 }
 
 resource "null_resource" "backend_service_create" {
-  count   = alltrue([var.create_se_waf_backend_service]) ? 1 : 0
-  
+  count = local.create_se_waf_backend_service ? 1 : 0
+
   triggers = {
     filename = local_file.backend_service[0].filename
     name     = local.backend_service_spec.name
   }
 
   lifecycle {
-    replace_triggered_by = [local_file.backend_service]
+    replace_triggered_by = [
+      local_file.backend_service,
+      google_compute_instance_group.gce_se_waf_ig
+    ]
   }
 
   provisioner "local-exec" {
@@ -40,8 +49,8 @@ resource "null_resource" "backend_service_create" {
     command = "gcloud compute backend-services import --global ${self.triggers.name} --source=${self.triggers.filename} --quiet"
   }
 
-
   depends_on = [
+    local_file.backend_service,
     google_compute_instance.gce_se_waf,
     google_compute_health_check.gce_se_waf_hc,
     google_compute_instance_group.gce_se_waf_ig,
@@ -49,7 +58,7 @@ resource "null_resource" "backend_service_create" {
 }
 
 resource "null_resource" "backend_service_destroy" {
-  count   = alltrue([var.create_se_waf_backend_service]) ? 1 : 0
+  count = local.create_se_waf_backend_service ? 1 : 0
 
   triggers = {
     filename = local_file.backend_service[0].filename

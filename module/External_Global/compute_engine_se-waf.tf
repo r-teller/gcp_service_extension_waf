@@ -5,6 +5,23 @@ data "google_compute_zones" "zones" {
   region  = each.key
 }
 
+resource "null_resource" "gce_se_waf" {
+  for_each = { for key, value in local.instance_configurations : key => value if var.gce_reset_on_env_change }
+
+  triggers = {
+    project_id = var.project_id
+    name       = each.value.name
+    zone       = each.value.zone
+    env        = join("", each.value.env.*.value)
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "gcloud compute instances reset ${self.triggers.name} --zone ${self.triggers.zone} --project ${self.triggers.project_id}"
+  }
+  depends_on = [google_compute_instance.gce_se_waf, ]
+}
+
 resource "google_compute_instance" "gce_se_waf" {
   for_each = local.instance_configurations
 
@@ -49,7 +66,6 @@ resource "google_compute_instance" "gce_se_waf" {
     })
   }
 
-
   network_interface {
     subnetwork = each.value.subnetwork
   }
@@ -76,6 +92,12 @@ resource "google_compute_instance" "gce_se_waf" {
     enable_integrity_monitoring = true
     enable_secure_boot          = false
     enable_vtpm                 = true
+  }
+
+  lifecycle {
+    ignore_changes = [
+      metadata["ssh-keys"]
+    ]
   }
 }
 

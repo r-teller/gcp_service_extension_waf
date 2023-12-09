@@ -6,7 +6,7 @@ module "gcp_utils" {
 module "global_service_engine" {
   source = "../../module/External_Global"
 
-  count = 1
+  count = 0
 
   create_se_waf_backend_service   = true
   create_se_waf_traffic_extension = true
@@ -14,11 +14,11 @@ module "global_service_engine" {
   global_se_waf_env = {
     se_debug                    = false,
     se_require_iap              = false,
-    se_allowed_ipv4_cidr_ranges = ["0.0.0.0/0"]
     se_denied_ipv4_cidr_ranges  = ["174.138.50.160"]
+    se_allowed_ipv4_cidr_ranges = ["0.0.0.0/0"]
   }
 
-
+  gce_reset_on_env_change = false
 
   project_id = var.project_id
   instance_configurations = [
@@ -26,7 +26,7 @@ module "global_service_engine" {
       region         = "us-central1",
       subnetwork     = google_compute_subnetwork.subnetwork_rfc1918["us-central1"].self_link
       zones          = ["us-central1-a"]
-      instance_count = 1
+      instance_count = 0
     },
     # {
     #   region     = "us-east1",

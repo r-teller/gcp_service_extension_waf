@@ -83,6 +83,8 @@ SERVICE_EXTENSION_DENIED_IPV4_CIDR_RANGES = environ.get("se_denied_ipv4_cidr_ran
 
 # Declare global variable
 global_sorted_ipv4_cidr_ranges = None
+global_formatted_ipv4_cidr_ranges = None
+
 
 if SERVICE_EXTENSION_DEBUG:
     print(f"Service Extension Test Mode: {SERVICE_EXTENSION_TEST}")
@@ -94,8 +96,10 @@ if SERVICE_EXTENSION_DEBUG:
         f"Service Extension Denied Source Ranges: {SERVICE_EXTENSION_DENIED_IPV4_CIDR_RANGES}"
     )
 
+
 def sort_ipv4_cidr_ranges() -> None:
-    global global_sorted_ipv4_cidr_ranges 
+    global global_sorted_ipv4_cidr_ranges
+    global global_formatted_ipv4_cidr_ranges
     allowed_ipv4_cidr_ranges = []
     denied_ipv4_cidr_ranges = []
 
@@ -125,14 +129,15 @@ def sort_ipv4_cidr_ranges() -> None:
     )
 
     if SERVICE_EXTENSION_DEBUG:
-        formatted_sorted_ipv4_cidr_ranges = [
+        global_formatted_ipv4_cidr_ranges = [
             (str(cidr_network), action)
             for cidr_network, action in global_sorted_ipv4_cidr_ranges
         ]
         print(
-            f"Service Extension XFF Header sorted CIDR Ranges: {formatted_sorted_ipv4_cidr_ranges}"
+            f"Service Extension XFF Header sorted CIDR Ranges: {global_formatted_ipv4_cidr_ranges}"
         )
     return None
+
 
 # [END serviceextensions_callout_add_header_imports]
 # [START serviceextensions_callout_add_header_main]
@@ -212,7 +217,6 @@ def handle_xff_validation(header_value):
 
     if len(xff_list) >= 2:
         client_ipv4 = ip_address(xff_list[-2])
-        print(list(global_sorted_ipv4_cidr_ranges))
         for cidr, action in global_sorted_ipv4_cidr_ranges:
             if client_ipv4 in cidr:
                 matched_ipv4_cidr = cidr
@@ -225,6 +229,9 @@ def handle_xff_validation(header_value):
                 break
 
         if SERVICE_EXTENSION_DEBUG:
+            print(
+                f"Service Extension XFF Header sorted CIDR Ranges: {global_formatted_ipv4_cidr_ranges}"
+            )
             print(
                 f"""Service Extension XFF Header result:
                     Source IPv4: {client_ipv4}
@@ -271,7 +278,6 @@ class CalloutProcessor(service_pb2_grpc.ExternalProcessorServicer):
     ) -> Iterator[service_pb2.ProcessingResponse]:
         "Process the client request and add example headers"
         for request in request_iterator:
-            print(f"doh => {request}")
             if request.HasField("request_headers"):
                 try:
                     scoped_headers = []
@@ -301,6 +307,7 @@ class CalloutProcessor(service_pb2_grpc.ExternalProcessorServicer):
 
                     if SERVICE_EXTENSION_DEBUG:
                         print(f"Service Extension in Scope Headers: {scoped_headers}")
+                        print(f"Service Extension in Debug Headers: {debug_headers}")
 
                     for header in request_headers.headers:
                         if header.key in scoped_headers or (
@@ -310,11 +317,17 @@ class CalloutProcessor(service_pb2_grpc.ExternalProcessorServicer):
                                 "utf-8", "ignore"
                             )
 
+                            if SERVICE_EXTENSION_DEBUG:
+                                header_type = (
+                                    "Scoped"
+                                    if header.key in scoped_headers
+                                    else "Debug"
+                                )
+                                print(
+                                    f"Service Extension {header_type} Header: ({header.key}), Value: ({header_value})"
+                                )
+
                             if header.key in scoped_headers:
-                                if SERVICE_EXTENSION_DEBUG:
-                                    print(
-                                        f"Service Extension Scoped Header: {header.key}, Value {header_value}"
-                                    )
                                 response_generator = scoped_header_actions[header.key](
                                     header_value
                                 )

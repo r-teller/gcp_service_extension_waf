@@ -17,6 +17,11 @@ variable "create_se_waf_traffic_extension" {
   default = true
 }
 
+variable "gce_reset_on_env_change" {
+  type    = bool
+  default = false
+}
+
 variable "global_se_waf_env" {
   type = object({
     se_debug                    = optional(bool, false),
@@ -40,7 +45,7 @@ variable "instance_configurations" {
     subnetwork     = string
     instance_count = optional(number, 1)
     machine_type   = optional(string, "n2-standard-2")
-    container_id   = optional(string, "rteller/se-waf:0.0.4-beta"),
+    container_id   = optional(string, "rteller/se-waf:latest"),
     se_waf_env = optional(object({
       se_debug                    = optional(bool, null),
       se_require_iap              = optional(bool, null),
